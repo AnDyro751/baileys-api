@@ -183,7 +183,7 @@ export const deleteMessageForMe: RequestHandler = async (req, res) => {
 		const exists = await WhatsappService.jidExists(session, jid, type);
 		if (!exists) return res.status(400).json({ error: "JID does not exists" });
 
-		const result = await session.chatModify({ clear: { messages: [message] } }, jid);
+		const result = await session.chatModify({ clear: true, lastMessages: [message] }, jid);
 
 		res.status(200).json(result);
 	} catch (e) {
