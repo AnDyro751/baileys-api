@@ -1,9 +1,10 @@
-import type { BaileysEventEmitter, MessageUserReceipt, proto, WAMessageKey } from "baileys";
+import type { BaileysEventEmitter, MessageUserReceipt, proto, WAMessageKey, WAMessage } from "baileys";
 import { jidNormalizedUser, toNumber } from "baileys";
 import type { BaileysEventHandler, MakeTransformedPrisma } from "@/types";
 import { transformPrisma, logger, emitEvent } from "@/utils";
 import { prisma } from "@/config/database";
 import type { Message } from "@prisma/client";
+import { buildHistory } from "@/utils/buildHistory";
 
 const getKeyAuthor = (key: WAMessageKey | undefined | null) =>
 	(key?.fromMe ? "me" : key?.participant || key?.remoteJid) || "";
@@ -42,32 +43,37 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 	};
 
 	const upsert: BaileysEventHandler<"messages.upsert"> = async ({ messages, type }) => {
+
 		switch (type) {
 			case "append":
 			case "notify":
 				for (const message of messages) {
 					try {
-						const jid = jidNormalizedUser(message.key.remoteJid!);
-						const data = transformPrisma(message) as MakeTransformedPrisma<Message>;
+						logger.info("message", message);
 
-						await model.upsert({
-							select: { pkId: true },
-							create: {
-								...data,
-								remoteJid: jid,
-								id: message.key.id!,
-								sessionId,
-							},
-							update: { ...data },
-							where: {
-								sessionId_remoteJid_id: {
-									remoteJid: jid,
-									id: message.key.id!,
-									sessionId,
-								},
-							},
-						});
-						emitEvent("messages.upsert", sessionId, { messages: data });
+
+
+						const jid = jidNormalizedUser(message.key.remoteJid!);
+
+						if (jid.endsWith("@g.us")) {
+							logger.info("Es un mensaje de grupo, no lo insertamos");
+							continue;
+						}
+
+						if (jid.endsWith("@newsletter")) {
+							logger.info("Es un mensaje de newsletter, no lo insertamos");
+							continue;
+						}
+
+						if (message.isGroupHistoryMessage) {
+							logger.info("Es un mensaje de grupo, no lo insertamos");
+							continue;
+						}
+
+						if (!message.key.fromMe) {
+							// Enviamos al webhook solo cuando el mensaje no es de nosotros
+							emitEvent("messages.upsert", sessionId, { message: buildHistory([message])[0] });
+						}
 
 						const chatExists =
 							(await prisma.chat.count({ where: { id: jid, sessionId } })) > 0;
@@ -272,24 +278,24 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 	const listen = () => {
 		if (listening) return;
 
-		event.on("messaging-history.set", set);
+		// event.on("messaging-history.set", set);
 		event.on("messages.upsert", upsert);
-		event.on("messages.update", update);
-		event.on("messages.delete", del);
-		event.on("message-receipt.update", updateReceipt);
-		event.on("messages.reaction", updateReaction);
+		// event.on("messages.update", update);
+		// event.on("messages.delete", del);
+		// event.on("message-receipt.update", updateReceipt);
+		// event.on("messages.reaction", updateReaction);
 		listening = true;
 	};
 
 	const unlisten = () => {
 		if (!listening) return;
 
-		event.off("messaging-history.set", set);
+		// event.off("messaging-history.set", set);
 		event.off("messages.upsert", upsert);
-		event.off("messages.update", update);
-		event.off("messages.delete", del);
-		event.off("message-receipt.update", updateReceipt);
-		event.off("messages.reaction", updateReaction);
+		// event.off("messages.update", update);
+		// event.off("messages.delete", del);
+		// event.off("message-receipt.update", updateReceipt);
+		// event.off("messages.reaction", updateReaction);
 		listening = false;
 	};
 

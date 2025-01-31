@@ -2,6 +2,7 @@ import type { EventsType } from "@/types/websocket";
 import type { SocketServer } from "../server/websocket-server";
 import env from "@/config/env";
 import axios from "axios";
+import { logger } from "./logger";
 
 let socketServer: SocketServer | null = null;
 export function initializeSocketEmitter(server: SocketServer) {
@@ -15,6 +16,7 @@ export function emitEvent(
 	status: "success" | "error" = "success",
 	message?: string,
 ) {
+
 	if (env.ENABLE_WEBHOOK) {
 		sendWebhook(event, sessionId, data, status, message);
 	}
@@ -34,6 +36,7 @@ export async function sendWebhook(
 	message?: string,
 ) {
 	try {
+		logger.info({ sessionId, event, data, status, message }, "Sending webhook");
 		await axios.post(env.URL_WEBHOOK, {
 			sessionId,
 			event,

@@ -1,3 +1,5 @@
+import { prisma } from "@/config/database";
+import { logger } from "@/utils";
 import WhatsappService from "@/whatsapp/service";
 import type { RequestHandler } from "express";
 
@@ -16,9 +18,25 @@ export const status: RequestHandler = (req, res) => {
 export const add: RequestHandler = async (req, res) => {
 	const { sessionId, readIncomingMessages, ...socketConfig } = req.body;
 
-	if (WhatsappService.sessionExists(sessionId))
-		return res.status(400).json({ error: "Session already exists" });
-	WhatsappService.createSession({ sessionId, res, readIncomingMessages, socketConfig });
+	if (WhatsappService.sessionExists(sessionId)) {
+		logger.info("-----Session already exists");
+		return res.status(400).json({ error: "Ya existe una sesión. Vuelva a iniciar sesión." });
+	}
+
+	try {
+		await WhatsappService.createSession({
+			sessionId,
+			res,
+			readIncomingMessages,
+			socketConfig
+		});
+	} catch (error) {
+		logger.error("-----Failed to create session", error);
+		return res.status(500).json({
+			error: "Failed to create session",
+			details: error.message
+		});
+	}
 };
 
 export const addSSE: RequestHandler = async (req, res) => {
@@ -30,7 +48,7 @@ export const addSSE: RequestHandler = async (req, res) => {
 	});
 
 	if (WhatsappService.sessionExists(sessionId)) {
-		res.write(`data: ${JSON.stringify({ error: "Session already exists" })}\n\n`);
+		res.write(`data: ${JSON.stringify({ error: "Ya existe una sesión. Vuelva a iniciar sesión." })}\n\n`);
 		res.end();
 		return;
 	}
@@ -38,6 +56,22 @@ export const addSSE: RequestHandler = async (req, res) => {
 };
 
 export const del: RequestHandler = async (req, res) => {
-	await WhatsappService.deleteSession(req.params.sessionId);
-	res.status(200).json({ message: "Session deleted" });
+	try {
+
+		if (!req.params.sessionId) {
+			logger.error("-----Session ID is required");
+			return res.status(400).json({ message: "Session ID is required", success: false });
+		}
+
+		await prisma.session.deleteMany({
+			where: {
+				sessionId: req.params.sessionId
+			}
+		});
+
+		await WhatsappService.deleteSession(req.params.sessionId);
+		res.status(200).json({ message: "Session deleted", success: true });
+	} catch (error) {
+		res.status(500).json({ message: "Failed to delete session", success: false });
+	}
 };

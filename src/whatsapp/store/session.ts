@@ -52,11 +52,11 @@ export async function useSession(sessionId: string): Promise<{
 		}
 	};
 
-	const del = async (id: string) => {
+	const del = async () => {
 		try {
-			await model.delete({
-				select: { pkId: true },
-				where: { sessionId_id: { id: fixId(id), sessionId } },
+			logger.error("-22----delete session");
+			await model.deleteMany({
+				where: { sessionId },
 			});
 		} catch (e) {
 			logger.error(e, "An error occured during session delete");
@@ -94,7 +94,7 @@ export async function useSession(sessionId: string): Promise<{
 						for (const id in data[category]) {
 							const value = data[category][id];
 							const sId = `${category}-${id}`;
-							tasks.push(value ? write(value, sId) : del(sId));
+							tasks.push(value ? write(value, sId) : del());
 						}
 					}
 					await Promise.all(tasks);

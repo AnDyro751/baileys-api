@@ -12,6 +12,13 @@ router.get(
 	requestValidator,
 	message.list,
 );
+router.get(
+	"/last",
+	query("remoteJid").isString().notEmpty(),
+	requestValidator,
+	sessionValidator,
+	message.getLastMessages,
+);
 router.post(
 	"/send",
 	body("jid").isString().notEmpty(),

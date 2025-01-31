@@ -2,6 +2,7 @@ import { type EventsType } from "@/types/websocket";
 import env from "@/config/env";
 import { Server as SocketIOServer } from "socket.io";
 import type http from "http";
+import { logger } from "@/utils";
 
 interface SocketData {
 	session_id: string;
@@ -72,9 +73,9 @@ export class SocketServer {
 	}
 
 	public emitEvent(event: EventsType, session_id: string, data: unknown) {
-		console.log(`Emitting event ${event} to session ${session_id}`);
+		logger.info({ event, session_id, data }, "Emitting event");
 
-		this.io.to(session_id).emit(event, { event, session_id, data });
+		// this.io.to(session_id).emit(event, { event, session_id, data });
 	}
 
 	public getConnectedClients(session_id: string): number {

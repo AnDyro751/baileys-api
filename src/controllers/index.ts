@@ -1,4 +1,5 @@
 export * as chat from "./chat";
+export * as catalog from "./catalog";
 export * as contact from "./contact";
 export * as group from "./group";
 export * as message from "./message";

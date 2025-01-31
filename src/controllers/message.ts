@@ -8,8 +8,41 @@ import WhatsappService from "@/whatsapp/service";
 import { updatePresence } from "./misc";
 import { WAPresence } from "@/types";
 
+export const getLastMessages: RequestHandler = async (req, res) => {
+	const { sessionId } = req.params;
+	const remoteJid = req.query.remoteJid as string;
+
+	const contact = await prisma.contact.findUnique({
+		where: {
+			sessionId_id: {
+				sessionId,
+				id: remoteJid,
+			},
+		},
+	});
+
+	if (!remoteJid) return res.status(400).json({ error: "Remote JID is required" });
+
+	console.log(sessionId, "SESSION ID");
+
+	const messages = await prisma.message.findMany({
+		where: {
+			sessionId,
+			remoteJid,
+		},
+		orderBy: { pkId: "desc" },
+		take: 50,
+	});
+	console.log(messages, "MESSAGES");
+	res.status(200).json({
+		messages: [],
+		contact,
+	});
+};
+
 export const list: RequestHandler = async (req, res) => {
 	try {
+		console.log("LIST");
 		const { sessionId } = req.params;
 		const { cursor = undefined, limit = 25 } = req.query;
 		const messages = (
@@ -44,20 +77,20 @@ export const send: RequestHandler = async (req, res) => {
 		const validJid = await WhatsappService.validJid(session, jid, type);
 		if (!validJid) return res.status(400).json({ error: "JID does not exists" });
 
-		await updatePresence(session, WAPresence.Available, validJid);
+		// await updatePresence(session, WAPresence.Available, validJid);
 		const result = await session.sendMessage(validJid, message, options);
-		emitEvent("send.message", sessionId, { jid: validJid, result });
+		// emitEvent("send.message", sessionId, { jid: validJid, result });
 		res.status(200).json(result);
 	} catch (e) {
 		const message = "An error occured during message send";
 		logger.error(e, message);
-		emitEvent(
-			"send.message",
-			req.params.sessionId,
-			undefined,
-			"error",
-			message + ": " + e.message,
-		);
+		// emitEvent(
+		// 	"send.message",
+		// 	req.params.sessionId,
+		// 	undefined,
+		// 	"error",
+		// 	message + ": " + e.message,
+		// );
 		res.status(500).json({ error: message });
 	}
 };

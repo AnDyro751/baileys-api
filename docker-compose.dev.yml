@@ -1,18 +1,6 @@
 version: '3.8'
 
 services:
-  baileys-db:
-    image: postgres
-    container_name: baileys-db
-    environment:
-      POSTGRES_PASSWORD: 2024pass
-      POSTGRES_DB: bailey
-    ports:
-      - "5432:5432"  # Exportado apenas para demonstração, remova em produção
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks: 
-      - wpp-net
   baileys-api:
     container_name: baileys-api
     build:
@@ -21,19 +9,22 @@ services:
     volumes:
       - '.:/app'
       - /app/node_modules
-      - prisma:/prisma
+      - './prisma:/app/prisma'
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgres://postgres:2024pass@baileys-db:5432/bailey
-    depends_on:
-      - baileys-db
-    networks: 
-      - wpp-net
+      DATABASE_URL: postgresql://neondb_owner:zbm5Pq8UeLMQ@ep-rough-silence-a5357t5x.us-east-2.aws.neon.tech/neondb?sslmode=require
+      API_KEY: popodeperro
+      OTHER_SERVICE_URL: http://host.docker.internal:3001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "npx", "prisma", "generate"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-volumes:
-  postgres_data:
-  prisma:
 networks:
-  wpp-net:
+  app-network:
     driver: bridge
+

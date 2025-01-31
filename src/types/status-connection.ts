@@ -4,5 +4,5 @@ export enum WAStatus {
 	Authenticated = "authenticated",
 	PullingWAData = "pulling_wa_data",
 	Connected = "connected",
-	Disconected = "disconected",
+	Disconected = "disconnected",
 }

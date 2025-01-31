@@ -38,14 +38,25 @@ class WhatsappService {
 	}
 
 	private async init() {
+		logger.info("-----init 1");
+
+		const currentSessions = WhatsappService.sessions.keys();
+
+		console.log("-----currentSessions", JSON.stringify(currentSessions));
+
 		const storedSessions = await prisma.session.findMany({
 			select: { sessionId: true, data: true },
 			where: { id: { startsWith: env.SESSION_CONFIG_ID } },
+			// where: { id: { notIn: Array.from(currentSessions) } },
 		});
+
+		console.log("-----storedSessions", storedSessions);
 		for (const { sessionId, data } of storedSessions) {
 			const { readIncomingMessages, ...socketConfig } = JSON.parse(data);
+			console.log("-----create session", sessionId);
 			WhatsappService.createSession({ sessionId, readIncomingMessages, socketConfig });
 		}
+		logger.info("-----init 2", storedSessions);
 	}
 
 	private static updateWaConnection(sessionId: string, waStatus: WAStatus) {
@@ -58,7 +69,8 @@ class WhatsappService {
 
 	private static shouldReconnect(sessionId: string) {
 		let attempts = WhatsappService.retries.get(sessionId) ?? 0;
-
+		console.log("-----shouldReconnect ASJNAJ", attempts, `${attempts}`, "----", sessionId);
+		logger.info("-----shouldReconnect ASJNAJ", attempts, `${attempts}`, "----", sessionId);
 		if (attempts < env.MAX_RECONNECT_RETRIES) {
 			attempts += 1;
 			WhatsappService.retries.set(sessionId, attempts);
@@ -70,22 +82,23 @@ class WhatsappService {
 	static async createSession(options: createSessionOptions) {
 		const { sessionId, res, SSE = false, readIncomingMessages = false, socketConfig } = options;
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
+
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
 
 		const destroy = async (logout = true) => {
+			logger.info("-----destroy session INIINI");
 			try {
-				await Promise.all([
-					logout && socket.logout(),
-					prisma.chat.deleteMany({ where: { sessionId } }),
-					prisma.contact.deleteMany({ where: { sessionId } }),
-					prisma.message.deleteMany({ where: { sessionId } }),
-					prisma.groupMetadata.deleteMany({ where: { sessionId } }),
-					prisma.session.deleteMany({ where: { sessionId } }),
-				]);
-				logger.info({ session: sessionId }, "Session destroyed");
+				prisma.session.deleteMany({
+					where: {
+						sessionId: sessionId
+					}
+				});
+				logout && socket.logout();
+				logger.info({ session: sessionId }, "Se ha eliminado la sesión");
 			} catch (e) {
 				logger.error(e, "An error occurred during session destroy");
 			} finally {
+				console.log("-------delete session en el finally", sessionId);
 				WhatsappService.sessions.delete(sessionId);
 				WhatsappService.updateWaConnection(sessionId, WAStatus.Disconected);
 			}
@@ -105,7 +118,8 @@ class WhatsappService {
 						res.status(500).json({ error: "Unable to create session" });
 					res.end();
 				}
-				destroy(doNotReconnect);
+				logger.error("-----Unable to create session--- destroy");
+				destroy(true);
 				return;
 			}
 
@@ -142,7 +156,8 @@ class WhatsappService {
 						res.status(500).json({ error: "Unable to generate QR" });
 					}
 				}
-				destroy();
+				logger.error("----2-Unable to create session--- destroy");
+				// destroy();
 			}
 		};
 
@@ -171,7 +186,8 @@ class WhatsappService {
 				(qr && currentGenerations >= env.SSE_MAX_QR_GENERATION)
 			) {
 				res && !res.writableEnded && res.end();
-				destroy();
+				logger.error("-----3-Unable to create session--- destroy");
+				// destroy();
 				return;
 			}
 
@@ -188,7 +204,7 @@ class WhatsappService {
 			: handleNormalConnectionUpdate;
 		const { state, saveCreds } = await useSession(sessionId);
 		const socket = makeWASocket({
-			printQRInTerminal: true,
+			printQRInTerminal: false,
 			browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
 			generateHighQualityLinkPreview: true,
 			...socketConfig,
@@ -245,15 +261,22 @@ class WhatsappService {
 			});
 		}
 
-		await prisma.session.upsert({
-			create: {
-				id: configID,
-				sessionId,
-				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
-			},
-			update: {},
-			where: { sessionId_id: { id: configID, sessionId } },
-		});
+		try {
+			await prisma.session.upsert({
+				create: {
+					id: configID,
+					sessionId,
+					data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
+				},
+				update: {
+					data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
+				},
+				where: { sessionId_id: { id: configID, sessionId } },
+			});
+		} catch (error) {
+			logger.error(error, "Error creating session in database");
+			throw error;
+		}
 	}
 
 	static getSessionStatus(session: Session) {
@@ -276,6 +299,8 @@ class WhatsappService {
 
 	static async deleteSession(sessionId: string) {
 		WhatsappService.sessions.get(sessionId)?.destroy();
+		logger.error("-----delete session 1");
+		WhatsappService.sessions.delete(sessionId);
 	}
 
 	static sessionExists(sessionId: string) {

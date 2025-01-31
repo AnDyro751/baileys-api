@@ -83,6 +83,22 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 		for (const update of updates) {
 			try {
 				const data = transformPrisma(update);
+
+				const modelFind = await model.findUnique({
+					where: {
+						sessionId_id: { id: update.id!, sessionId },
+					},
+				});
+
+				if (!modelFind) {
+					logger.info({ update }, "Got update for non existent contact");
+					const createContact = await model.create({
+						data: { ...data, sessionId, id: update.id! },
+					});
+					emitEvent("contacts.update", sessionId, { contacts: createContact });
+					return;
+				}
+
 				await model.update({
 					select: { pkId: true },
 					data,
@@ -110,7 +126,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 	const listen = () => {
 		if (listening) return;
 
-		event.on("messaging-history.set", set);
+		// event.on("messaging-history.set", set);
 		event.on("contacts.upsert", upsert);
 		event.on("contacts.update", update);
 		listening = true;
@@ -119,7 +135,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 	const unlisten = () => {
 		if (!listening) return;
 
-		event.off("messaging-history.set", set);
+		// event.off("messaging-history.set", set);
 		event.off("contacts.upsert", upsert);
 		event.off("contacts.update", update);
 		listening = false;
